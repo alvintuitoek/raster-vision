@@ -1,36 +1,53 @@
 class RegistryError(Exception):
+    """Exception raised for invalid use of registry."""
     pass
 
 
 class Registry():
+    """A registry for resources that are built-in or contributed by plugins."""
+    
     def __init__(self):
         self.runners = {}
-        self.filesystems = []
+        self.file_systems = []
         self.configs = {}
         self.config_upgraders = {}
         self.rv_config_schema = {}
 
-    def add_runner(self, runner_type, runner):
-        if runner_type in self.runners:
+    def add_runner(self, runner_name: str, 
+                   runner: 'rastervision2.pipeline.runner.Runner'):
+        """Add a Runner.
+
+        Args:
+            runner_name: the name of the runner that is passed to the CLI
+            runner: the Runner class
+        """
+        if runner_name in self.runners:
             raise RegistryError(
                 'There is already a {} runner in the registry.'.format(
-                    runner_type))
+                    runner_name))
 
-        self.runners[runner_type] = runner
+        self.runners[runner_name] = runner
 
-    def add_filesystem(self, filesystem):
-        self.filesystems.append(filesystem)
-
-    def get_runner(self, runner_type):
-        runner = self.runners.get(runner_type)
+    def get_runner(self, runner_name) -> 'rastervision2.pipeline.runner.Runner':
+        """Return a runner based on its name."""
+        runner = self.runners.get(runner_name)
         if runner:
             return runner
         else:
             raise RegistryError(
-                '{} is not a registered runner.'.format(runner_type))
+                '{} is not a registered runner.'.format(runner_name))
+
+    def add_file_system(
+            self, file_system: 'rastervision2.pipeline.filesystem.FileSystem'):
+        """Add a FileSystem.
+        
+        Args:
+            file_system: the FileSystem to add
+        """
+        self.file_systems.append(file_system)
 
     def get_file_system(self, uri: str, mode: str = 'r'):
-        for fs in self.filesystems:
+        for fs in self.file_systems:
             if fs.matches_uri(uri, mode):
                 return fs
         if mode == 'w':
@@ -77,6 +94,18 @@ class Registry():
     def get_rv_config_schema(self):
         return self.rv_config_schema
 
+    def load_builtins(self):
+        from rastervision2.pipeline.runner import (InProcessRunner, INPROCESS)
+        from rastervision2.pipeline.filesystem import (HttpFileSystem,
+                                                       LocalFileSystem)
+
+        self.add_runner(INPROCESS, InProcessRunner)
+        self.add_filesystem(HttpFileSystem)
+        self.add_filesystem(LocalFileSystem)
+
+        # import so register_config decorators are called
+        import rastervision2.pipeline.pipeline_config  # noqa
+
     def load_plugins(self):
         import importlib
         import pkgutil
@@ -100,14 +129,3 @@ class Registry():
             if register_plugin:
                 register_plugin(self)
 
-    def load_builtins(self):
-        from rastervision2.pipeline.runner import (InProcessRunner, INPROCESS)
-        from rastervision2.pipeline.filesystem import (HttpFileSystem,
-                                                       LocalFileSystem)
-
-        self.add_runner(INPROCESS, InProcessRunner)
-        self.add_filesystem(HttpFileSystem)
-        self.add_filesystem(LocalFileSystem)
-
-        # import so register_config decorators are called
-        import rastervision2.pipeline.pipeline_config  # noqa
